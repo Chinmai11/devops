@@ -1,54 +1,54 @@
 pipeline {
-
-    parameters {
-        booleanParam(name: 'autoApprove', defaultValue: false, description: 'Automatically run apply after generating plan?')
-    } 
+    agent any
     environment {
-        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
     }
-
-   agent  any
     stages {
-        stage('checkout') {
+        stage('Checkout Code') {
             steps {
-                 script{
-                        dir("terraform")
-                        {
-                            git "https://github.com/Chinmai11/devops.git"
-                        }
-                    }
-                }
-            }
-
-        stage('Plan') {
-            steps {
-                sh 'pwd;cd terraform/ ; terraform init'
-                sh "pwd;cd terraform/ ; terraform plan -out tfplan"
-                sh 'pwd;cd terraform/ ; terraform show -no-color tfplan > tfplan.txt'
+                git branch: 'main', url: 'https://github.com/Chinmai11/devops.git'
             }
         }
-        stage('Approval') {
-           when {
-               not {
-                   equals expected: true, actual: params.autoApprove
-               }
-           }
-
-           steps {
-               script {
-                    def plan = readFile 'terraform/tfplan.txt'
-                    input message: "Do you want to apply the plan?",
-                    parameters: [text(name: 'Plan', description: 'Please review the plan', defaultValue: plan)]
-               }
-           }
-       }
-
-        stage('Apply') {
+        stage('Initialize Terraform') {
             steps {
-                sh "pwd;cd terraform/ ; terraform apply -input=false tfplan"
+                bat 'terraform init'
+            }
+        }
+        stage('Terraform Plan') {
+            steps {
+                bat 'terraform plan -out=tfplan'
+            }
+        }
+        stage('Approve Apply') {
+            steps {
+                script {
+                    // Prompt user for confirmation
+                    input message: 'Do you want to proceed with terraform apply?', ok: 'Yes, proceed', timeout:3
+                }
+            }
+        }
+        stage('Terraform Apply') {
+            steps {
+                bat 'terraform apply -auto-approve tfplan'
+            }
+        }
+        stage('Wait for 3 Minutes') {
+            steps {
+                script {
+                    sleep(time: 3, unit: 'MINUTES') // Wait for 3 minutes
+                }
+            }
+        }
+        stage('Terraform Destroy') {
+            steps {
+                bat 'terraform destroy -auto-approve'
             }
         }
     }
-
-  }
+    post {
+        always {
+            cleanWs() // Cleans up the workspace
+        }
+    }
+}
